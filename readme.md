@@ -8,7 +8,7 @@ Este código escrito en python permite generar covers (cubiertas) DVD a partir d
 # Lista de pedidos POTOSI                                                                                         
                                                                                                                   
 * [ ] Sono Bisque S1 JAP                                                                                          
-* [ ] Solo leveling S1 LAT                                                                                        
+* Solo leveling S1 LAT                                                                                        
 * [ ] Solo Leveling JAP                                                                                           
 * [ ] Sono Bisque Doll wa Koi wo Suru                                                                             
 * [ ] Jigokuraku S2 LAT                                                                                           
