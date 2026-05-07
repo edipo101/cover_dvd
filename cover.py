@@ -20,6 +20,9 @@ class DVDGenAgent:
         self.spine_width = 96  # Ancho del lomo del cover DVD (96 pixels for a standard DVD case)
         self.side_width = (self.canvas_width - self.spine_width) // 2
         self.season_year = ''
+
+        self.size_font_title = 38  # Tamaño de fuente para el título en pixeles (24 pt)
+        self.size_font_year = 28  # Tamaño de fuente para el año de la temporada en pixeles (18 pt)
         
         # Colores para cada temporada (puedes ajustar estos colores a tu preferencia)
         self.season_color_winter = (240, 148, 117)  # Color para invierno
@@ -83,15 +86,20 @@ class DVDGenAgent:
         draw.rectangle([self.side_width, 0, self.side_width + self.spine_width, self.canvas_height], fill=spine_color)
         
         # Agregamos el icono DVD en la parte superior e inferior del lomo
+        (margin_top, margin_bottom) = (15, 15)
         dvd_icon = Image.open("assets/dvd_icon.png")
         dvd_icon = ImageOps.contain(dvd_icon, (80, 80))  # Resize the DVD icon to match the new image size
-        cover.paste(dvd_icon, (self.side_width + self.spine_width // 2 - dvd_icon.width // 2, 15), dvd_icon)  # Paste the DVD icon onto the new image
-        cover.paste(dvd_icon, (self.side_width + self.spine_width // 2 - dvd_icon.width // 2, self.canvas_height - dvd_icon.height - 15), dvd_icon)  # Paste the DVD icon onto the new image
+        cover.paste(dvd_icon, (self.side_width + self.spine_width // 2 - dvd_icon.width // 2, margin_top), dvd_icon)  # Paste the DVD icon onto the new image
+        cover.paste(dvd_icon, (self.side_width + self.spine_width // 2 - dvd_icon.width // 2, self.canvas_height - dvd_icon.height - margin_bottom), dvd_icon)  # Paste the DVD icon onto the new image
         
         # Season year
         season_year = data.get('seasonYear')
-        title_font = ImageFont.truetype("C:/Windows/Fonts/GOTHICB.TTF", 30)
-        draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(season_year)) // 2), dvd_icon.height + 15), str(season_year), fill=(0, 0, 0), font=title_font)  # Draw the season year on the spine
+        title_font = ImageFont.truetype("C:/Windows/Fonts/agencyfb.TTF", self.size_font_year)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
+        draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(season_year)) // 2), margin_top + dvd_icon.height + 5), str(season_year), fill=(0, 0, 0), font=title_font)  # Draw the season year on the spine
+
+        # Agregar Id anime en la parte inferior del lomo
+        anime_id_text = data['id']
+        draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(anime_id_text)) // 2), self.canvas_height - 2 * margin_bottom - dvd_icon.height - 25), str(anime_id_text), fill=(0, 0, 0), font=title_font)
 
         # 4. Lógica para el Frente (Derecha del lienzo)
         # Definimos las cabeceras para imitar a un navegador web
@@ -100,7 +108,6 @@ class DVDGenAgent:
             'Referer': 'https://anilist.co/'
         }
 
-        
         # Creamos la petición envolviendo la URL y los headers
         req = urllib.request.Request(data['coverImage']['extraLarge'], headers=headers)
 
@@ -119,7 +126,7 @@ class DVDGenAgent:
         title_text = data['title']['romaji']  # Title text for the cover
 
         wrapped_title = textwrap.fill(title_text, width=33)  # Wrap the title text to fit within a certain width
-        title_font_size = 38 # Tamaño de fuente para el título en pixeles (24 pt)
+        title_font_size = self.size_font_title  # Tamaño de fuente para el título en pixeles (24 pt)
         title_color = (255, 255, 255)  # White color for the title text
         front_cover_x = 738 + self.spine_width
         title_font = ImageFont.truetype("C:/Windows/Fonts/GOTHICB.TTF", title_font_size)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
