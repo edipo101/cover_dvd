@@ -176,6 +176,18 @@ class DVDGenAgent:
         dvd_pos = (self.side_width + self.spine_width + 5, 5)
         dvd_logo = dvd_logo.resize((85, 85))  # Resize the DVD logo to match the new image size
         cover.paste(dvd_logo, dvd_pos, dvd_logo)  # Paste the DVD logo onto the new image
+
+        # Etiqueta del idioma
+        cover_language = Image.new('RGB', (300, 55), (255, 0, 0))  # Create a transparent image for the language label
+        language_font = ImageFont.truetype("C:/Windows/Fonts/BRLNSDB.TTF", 24)  # Load a font for the language label  
+        language_text = "Japonés"  # Text for the language label   
+        d = ImageDraw.Draw(cover_language)
+        language_bbox = d.textbbox((0, 0), language_text, font=language_font)
+        language_width = language_bbox[2] - language_bbox[0]
+        d.text(((cover_language.width - language_width) // 2, 10), language_text, font=language_font, fill="white")  # Draw the language text on the label
+        # cover_language = cover_language.rotate(-45, expand=True)  # Rotate the language label by 15 degrees
+        # cover.paste(cover_language, (1390, -50))  # Paste the language label onto the new image
+        cover.paste(cover_language, (1390, 5))  # Paste the language label onto the new image
         
         cover.show()
         return  0
