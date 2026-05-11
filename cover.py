@@ -118,7 +118,7 @@ class DVDGenAgent:
 
         # Agregar Id anime en la parte inferior del lomo
         anime_id_text = data['id']
-        draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(anime_id_text)) // 2), self.canvas_height - 2 * margin_bottom - dvd_icon.height - 25), str(anime_id_text), fill=(0, 0, 0), font=title_font)
+        draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(anime_id_text)) // 2), self.canvas_height - 2 * margin_bottom - dvd_icon.height - 27), str(anime_id_text), fill=(0, 0, 0), font=title_font)
 
     def create_cover(self, media_id):
         data = self.get_anilist_data(media_id)
@@ -190,7 +190,6 @@ class DVDGenAgent:
         cover.paste(dvd_logo, dvd_pos, dvd_logo)  # Paste the DVD logo onto the new image
 
         # Etiqueta del idioma
-        # cover_language = Image.new('RGBA', (300, 55), (255, 0, 0, 255))
         if lang == "jap":
             cover_language = Image.new('RGBA', (300, 55), self.cover_jap)  # Create a background for the language label
             language_color = self.color_jap
@@ -208,7 +207,7 @@ class DVDGenAgent:
             language_color = (0, 0, 0)  # Black text color
             language_text = "Desconocido"
 
-        language_font = ImageFont.truetype("./assets/BRLNSDB.TTF", 40)  # Load a font for the language label
+        language_font = ImageFont.truetype("./assets/BRLNSDB.TTF", 36)  # Load a font for the language label
         d = ImageDraw.Draw(cover_language)
         left, top, right, bottom = language_font.getbbox(language_text)
         language_width = right - left
