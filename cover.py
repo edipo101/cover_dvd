@@ -30,6 +30,17 @@ class DVDGenAgent:
         self.season_color_summer = (226, 177, 74)  # Color para verano
         self.season_color_fall = (153, 189, 115)  # Color para otoño
         self.season_color_default = (153, 153, 153)  # Color del lomo (you can choose any color you like)
+        
+        # Texto y colores del idioma
+        self.lang_japanese = "Japonés"
+        self.lang_spanish = "Español"
+        self.lang_latino = "Latino"
+        self.color_jap = (255, 0, 0)
+        self.color_spa = (255, 0, 0)
+        self.color_lat = (255, 0, 0)
+        self.cover_jap = (255, 255, 255)
+        self.cover_spa = (255, 255, 51)
+        self.cover_lat = (255, 255, 51)
 
     def get_anilist_data(self, media_id):
         query = '''
@@ -77,7 +88,7 @@ class DVDGenAgent:
         title = textwrap.shorten(title, width=35, placeholder="...")
 
         # Crear una imagen pequeña para el texto del lomo
-        font = ImageFont.truetype("C:/Windows/Fonts/GOTHIC.TTF", font_size)
+        font = ImageFont.truetype("./assets/CenturyGothic.TTF", font_size)
         # Calculamos tamaño del texto usando getbbox
         left, top, right, bottom = font.getbbox(title)
         tw, th = right - left, bottom - top
@@ -102,7 +113,7 @@ class DVDGenAgent:
         
         # Season year
         season_year = data.get('seasonYear')
-        title_font = ImageFont.truetype("C:/Windows/Fonts/agencyfb.TTF", self.size_font_year)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
+        title_font = ImageFont.truetype("./assets/agencyfb.TTF", self.size_font_year)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
         draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(season_year)) // 2), margin_top + dvd_icon.height + 5), str(season_year), fill=(0, 0, 0), font=title_font)  # Draw the season year on the spine
 
         # Agregar Id anime en la parte inferior del lomo
@@ -111,6 +122,7 @@ class DVDGenAgent:
 
     def create_cover(self, media_id):
         data = self.get_anilist_data(media_id)
+        lang = input("Ingrese el idioma del anime (jap, esp, lat): ").lower()
 
         # Aquí descargarías la imagen de TMDB o AniList
         print(f"Generando cover para: {data['title']['romaji']}...")
@@ -156,7 +168,7 @@ class DVDGenAgent:
         title_font_size = self.size_font_title  # Tamaño de fuente para el título en pixeles (24 pt)
         title_color = (255, 255, 255)  # White color for the title text
         front_cover_x = 738 + self.spine_width
-        title_font = ImageFont.truetype("C:/Windows/Fonts/GOTHICB.TTF", title_font_size)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
+        title_font = ImageFont.truetype("./assets/GOTHICB.TTF", title_font_size)  # Load a font (make sure to have the font file in the same directory or provide the correct path)
     
         # Calcular la posición del título para centrarlo horizontalmente en el cover frontal
         title_bbox = draw.multiline_textbbox((0, 0), wrapped_title, font=title_font, align="center")
@@ -178,17 +190,34 @@ class DVDGenAgent:
         cover.paste(dvd_logo, dvd_pos, dvd_logo)  # Paste the DVD logo onto the new image
 
         # Etiqueta del idioma
-        cover_language = Image.new('RGB', (300, 55), (255, 0, 0))  # Create a transparent image for the language label
-        language_font = ImageFont.truetype("C:/Windows/Fonts/BRLNSDB.TTF", 24)  # Load a font for the language label  
-        language_text = "Japonés"  # Text for the language label   
+        # cover_language = Image.new('RGBA', (300, 55), (255, 0, 0, 255))
+        if lang == "jap":
+            cover_language = Image.new('RGBA', (300, 55), self.cover_jap)  # Create a background for the language label
+            language_color = self.color_jap
+            language_text = self.lang_japanese
+        elif lang == "esp":
+            cover_language = Image.new('RGBA', (300, 55), self.cover_spa)  # Create a background for the language label
+            language_color = self.color_spa
+            language_text = self.lang_spanish
+        elif lang == "lat":
+            cover_language = Image.new('RGBA', (300, 55), self.cover_lat)  # Create a background for the language label
+            language_color = self.color_lat
+            language_text = self.lang_latino
+        else:
+            cover_language = Image.new('RGBA', (300, 55), "white")  # Create a white background for the language label
+            language_color = (0, 0, 0)  # Black text color
+            language_text = "Desconocido"
+
+        language_font = ImageFont.truetype("./assets/BRLNSDB.TTF", 40)  # Load a font for the language label
         d = ImageDraw.Draw(cover_language)
-        language_bbox = d.textbbox((0, 0), language_text, font=language_font)
-        language_width = language_bbox[2] - language_bbox[0]
-        d.text(((cover_language.width - language_width) // 2, 10), language_text, font=language_font, fill="white")  # Draw the language text on the label
-        # cover_language = cover_language.rotate(-45, expand=True)  # Rotate the language label by 15 degrees
-        # cover.paste(cover_language, (1390, -50))  # Paste the language label onto the new image
-        cover.paste(cover_language, (1390, 5))  # Paste the language label onto the new image
-        
+        left, top, right, bottom = language_font.getbbox(language_text)
+        language_width = right - left
+        language_height = bottom - top
+        # Centrar el texto dentro de la etiqueta del idioma
+        d.text(((cover_language.width - language_width) // 2, -top + (cover_language.height - language_height) // 2), language_text, font=language_font, fill=language_color)
+        cover_language = cover_language.rotate(-45, expand=True, fillcolor=(0, 0, 0, 0))  # Rotate the language label by -45 degrees
+        cover.paste(cover_language, (1380, -50), cover_language)  # Paste the language label onto the new image
+        # cover.paste(cover_language, (1000, 0), cover_language)  # Paste the language label onto the new image
         cover.show()
         return  0
 
@@ -200,5 +229,4 @@ class DVDGenAgent:
 # Uso del agente
 id_anime = input("Ingrese el ID del anime en AniList: ")
 agent = DVDGenAgent()
-# agent.create_cover("Cyberpunk Edgerunners")
 agent.create_cover(int(id_anime))
