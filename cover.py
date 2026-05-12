@@ -68,7 +68,7 @@ class DVDGenAgent:
         response = requests.post(self.anilist_url, json={'query': query, 'variables': vars})
         return response.json()['data']['Media']
 
-    def create_rear(self, draw, data, cover, font_size=28):
+    def create_rear(self, draw, data, cover, font_size=25, lang='jap'):
         # Agregar sinopsis
         synopsis = data.get('description', 'Sin sinopsis disponible.')
         synopsis = textwrap.shorten(synopsis, width=520, placeholder="...")  # Recortar la sinopsis a un máximo de caracteres
@@ -80,28 +80,82 @@ class DVDGenAgent:
         draw.multiline_text(rear_text_position, rear_text, font=font_syn, fill=(255, 255, 255), spacing=-3, stroke_width=3, stroke_fill=(0, 0, 0))  # Draw the synopsis text on the rear cover
         
         # Datos tecnicos
-        genres = GoogleTranslator(source='auto', target='es').translate(', '.join(data.get('genres', [])))  # Traducir los géneros al español
-        state = GoogleTranslator(source='auto', target='es').translate(data.get('status', 'N/A'))  # Traducir el estado al español
-        # season = GoogleTranslator(source='auto', target='es').translate(data.get('season', 'N/A'))  # Traducir la temporada al español
-        technical_info = f"Titulo: {data.get('title', {}).get('romaji', 'N/A')}\nGéneros: {genres}\nTipo: {data.get('type', 'N/A')}\nEpisodios: {data.get('episodes', 'N/A')}\nEstado: {state}\nEstreno: {data.get('season', 'N/A')} {data.get('seasonYear', 'N/A')}"
         font_tech = ImageFont.truetype("./assets/agencyfb.TTF", font_size)
-        technical_info_position = (20, cover.height - 500)  # Position for the technical information on the rear cover
-        # draw.multiline_text(technical_info_position, technical_info, font=font_tech, fill=(255, 255, 255), spacing=-3, stroke_width=3, stroke_fill=(0, 0, 0))  # Draw the technical information on the rear cover
-        
-        data_tech = {
-            'title': data.get('title', {}).get('romaji', 'N/A'),
-            'genres': data.get('genres', []),
-            'type': data.get('type', 'N/A'),
-            'episodes': data.get('episodes', 'N/A'),
-            'status': data.get('status', 'N/A'),
-            'season': data.get('season', 'N/A'),
-            'seasonYear': data.get('seasonYear', 'N/A')
+        cover_tech = Image.new('RGBA', (352, 295), (255, 255, 255, 0))  # Create a transparent image for the technical information
+        draw_tech = ImageDraw.Draw(cover_tech)
+        technical_info_position = (20, 17)  # Position for the technical information on the rear cover
+        draw_tech.rounded_rectangle((0, 0, 352, 295), fill=(255, 255, 255, 255), radius=15, outline=(255, 0, 0), width=2)
+
+        # Diccionario de traducción
+        stations = {
+            "spring": "primavera",
+            "summer": "verano", # Añadido por completitud
+            "fall": "otoño",
+            "autumn": "otoño",
+            "winter": "invierno"
         }
+        season = data.get('season', 'N/A').lower()
+        texto = season  # Por defecto, usamos el texto original si no se encuentra en el diccionario
+        for eng, esp in stations.items():
+            texto = texto.replace(eng, esp)
+        texto = texto.capitalize()
+
+        if lang == "jap":
+            language_text = self.lang_japanese
+        elif lang == "esp":
+            language_text = self.lang_spanish
+        elif lang == "lat":
+            language_text = self.lang_latino
+        else:
+            language_text = "Desconocido"
+
+        data_tech = {
+            'Título': data.get('title', {}).get('romaji', 'N/A'),
+            'Géneros': GoogleTranslator(source='auto', target='es').translate(', '.join(data.get('genres', []))),
+            'Tipo': data.get('type', 'N/A'),
+            'Episodios': data.get('episodes', 'N/A'),
+            'Estado': GoogleTranslator(source='auto', target='es').translate(data.get('status', 'N/A')).capitalize(),
+            'Audio': language_text,
+            'Temporada': texto + ' ' + str(data.get('seasonYear', 'N/A'))
+        }
+
         for key, value in data_tech.items():
-            print(f"{key}: {value}")
-            draw.text((technical_info_position[0], technical_info_position[1]), f"{key.capitalize()}: {value}", font=font_tech, fill=(255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0))
-            technical_info_position = (technical_info_position[0], technical_info_position[1] + 30)  # Move down for the next line of text
+            key_text = f"{key.capitalize()}: "
+            value_text = str(value)
+            # Wrap the value text to fit within width
+            wrapped_lines = textwrap.wrap(value_text, width=35)  # Approximate width for 352px
+            if wrapped_lines:
+                # First line: key + first part of value
+                first_value_line = wrapped_lines[0]
+                first_line = key_text + first_value_line
+                full_width = font_tech.getlength(first_line)
+                center_x = 176
+                start_x = center_x - full_width / 2
+                if start_x < 0:
+                    start_x = 0
+                draw_tech.text((start_x, technical_info_position[1]), key_text, font=font_tech, fill=(255, 0, 0))
+                key_width = font_tech.getlength(key_text)
+                draw_tech.text((start_x + key_width, technical_info_position[1]), first_value_line, font=font_tech, fill=(0, 0, 0))
+                technical_info_position = (technical_info_position[0], technical_info_position[1] + 30)
+                # Subsequent lines of value, centered in black
+                for line in wrapped_lines[1:]:
+                    full_width = font_tech.getlength(line)
+                    start_x = center_x - full_width / 2
+                    if start_x < 0:
+                        start_x = 0
+                    draw_tech.text((start_x, technical_info_position[1]), line, font=font_tech, fill=(0, 0, 0))
+                    technical_info_position = (technical_info_position[0], technical_info_position[1] + 30)
+            else:
+                # If no value, just draw key
+                full_width = font_tech.getlength(key_text)
+                start_x = center_x - full_width / 2
+                draw_tech.text((start_x, technical_info_position[1]), key_text, font=font_tech, fill=(255, 0, 0))
+                technical_info_position = (technical_info_position[0], technical_info_position[1] + 30)
         
+        # Agregar borde rojo de 2px con puntas redondeadas
+        
+        cover.paste(cover_tech, (20, 597), cover_tech)  # Paste the technical information onto the rear cover
+
         # Cargar referencia
         reference = Image.open("assets/referencia.png")
         reference = reference.resize((738, 144))  # Resize the reference image to match the new image size
@@ -181,8 +235,7 @@ class DVDGenAgent:
             front_cover = Image.new("RGB", (self.side_width, self.canvas_height), color=(255, 255, 255))  # Create a blank white image
 
         front_cover = ImageOps.cover(front_cover, (self.side_width, self.canvas_height))
-        # cover.paste(front_cover, (self.side_width + self.spine_width, 0))  # Paste the front cover onto the new image
-        cover.paste(front_cover, (0, 0))  # Paste the front cover onto the new image
+        cover.paste(front_cover, (self.side_width + self.spine_width, 0))  # Paste the front cover onto the new image
 
         # 5. Título del cover
         title_text = data['title']['romaji']  # Title text for the cover
@@ -249,8 +302,8 @@ class DVDGenAgent:
             print("No se encontró el anime con el ID proporcionado.")
             exit(0)
         
-        # lang = input("Ingrese el idioma del anime (jap, esp, lat): ").lower()
-        lang = "jap"
+        lang = input("Ingrese el idioma del anime (jap, esp, lat): ").lower()
+        # lang = "jap"
 
         # Aquí descargarías la imagen de TMDB o AniList
         print(f"Generando cover para: {data['title']['romaji']}...")
@@ -263,7 +316,7 @@ class DVDGenAgent:
         self.create_front(draw, data, cover, lang)
         
         # 2. Lógica para el posterior (Izquierdo del lienzo)
-        self.create_rear(draw, data, cover)
+        self.create_rear(draw, data, cover, 25, lang)
 
         # 3. Lógica para el lomo (Centro del lienzo)
         self.create_spine(draw, data, cover)
@@ -278,7 +331,7 @@ class DVDGenAgent:
         print(f"Archivo guardado como: {filename}")
 
 # Uso del agente
-# id_anime = input("Ingrese el ID del anime en AniList: ")
+id_anime = input("Ingrese el ID del anime en AniList: ")
 agent = DVDGenAgent()
-# agent.create_cover(int(id_anime))
-agent.create_cover(187464)
+agent.create_cover(int(id_anime))
+# agent.create_cover(187464)
