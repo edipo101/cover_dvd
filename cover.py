@@ -1,16 +1,16 @@
+import os
+
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageOps
 from PIL import ImageFont
 import textwrap
+import re
 from deep_translator import GoogleTranslator
 from bs4 import BeautifulSoup
-
 import urllib.request
 from io import BytesIO
-
 import requests
-from PIL import Image, ImageDraw, ImageFont
 
 class DVDGenAgent:
     def __init__(self):
@@ -61,6 +61,7 @@ class DVDGenAgent:
                   extraLarge
                 }
                 bannerImage
+                idMal
           }
         }
         '''
@@ -68,16 +69,139 @@ class DVDGenAgent:
         response = requests.post(self.anilist_url, json={'query': query, 'variables': vars})
         return response.json()['data']['Media']
 
+    def clean_title(self, title):
+        # Elimina "Season X", "Part X", "2nd Season", etc.
+        # El flag re.IGNORECASE hace que no importe si es mayúscula o minúscula
+        patterns = [
+            r' (?:S|s)eason \d+', 
+            r' (?:P|p)art \d+',
+            r' \d+(?:nd|st|rd|th) (?:S|s)eason',
+            r' (?:T|t)(?:V|v)'
+        ]
+        for pattern in patterns:
+            title = re.sub(pattern, '', title)
+        return title.strip()
+    
+    def get_back_drops(self, tmdb_info):
+        api_key = "d5d15ff775991a9be1c6f13d782d0388"  # Reemplaza con tu clave de TMDB
+        url = f"https://api.themoviedb.org/3/tv/{tmdb_info.get('id')}/images?api_key={api_key}"
+        try:
+            response = requests.get(url).json()
+            results = response.get('backdrops', [])
+        except Exception as e:
+            print(f"Error conectando a TMDB: {e}")
+            results = []
+        return results
+    
+    def get_tmdb_data(self, title, year):
+        api_key = "d5d15ff775991a9be1c6f13d782d0388"  # Reemplaza con tu clave de TMDB
+        url = "https://api.themoviedb.org/3/search/multi"
+        
+        params = {
+            "api_key": api_key,
+            "query": title,
+            "language": "es-ES", # Traer datos en español
+            "first_air_date_year": year, # Filtro para precisión
+            "include_adult": "false"
+        }
+
+        try:
+            response = requests.get(url, params=params)
+            results = response.json().get('results', [])
+            
+            if results:
+                # Tomamos el primer resultado que coincida
+                return results[0] 
+            return None
+        except Exception as e:
+            print(f"Error conectando a TMDB: {e}")
+            return None
+
+    def degrage_image(self, cover, ruta_entrada):
+        # 1. Abrir y preparar la imagen original
+        # original = Image.open(ruta_entrada).convert("RGBA")
+        original = ruta_entrada.convert("RGBA")
+        ancho, alto = original.size
+        
+        # 2. Calcular la región donde irá el degradado
+        inicio_y = (alto // 4) * 3
+        
+        # 3. Crear una nueva imagen para el degradado
+        alto_degradado = alto - inicio_y
+        degradado = Image.new("RGBA", (ancho, alto_degradado))
+        dibujar = ImageDraw.Draw(degradado)
+        
+        # 4. Dibujar el degradado línea por línea
+        for i in range(alto_degradado):
+            # Alpha: 0 en la parte superior, 255 en la inferior
+            alpha = int(255 * (i / alto_degradado))
+            color = (255, 255, 255, alpha)  # Blanco con transparencia
+            
+            # Dibujar una línea horizontal del color calculado
+            dibujar.line([(0, i), (ancho, i)], fill=color)
+        
+        # 5. Combinar el degradado con la imagen original
+        original.paste(degradado, (0, inicio_y), degradado)
+        
+        # 6. Guardar el resultado
+        # original.save(ruta_salida)
+        return original
+
     def create_rear(self, draw, data, cover, font_size=25, lang='jap'):
+        # Agregar imagenes de fondo
+        title_romaji = data.get('title').get('romaji')
+        title_cleaned = self.clean_title(title_romaji)
+        release_year = data.get('seasonYear')
+        self.img_base_url = "https://image.tmdb.org/t/p/original"
+        tmdb_info = self.get_tmdb_data(title_cleaned, release_year)
+        print(tmdb_info)
+        
+        if tmdb_info:
+            # Si TMDB tiene sinopsis, la usamos (adiós traductor de Google)
+            sinopsis = tmdb_info.get('overview', 'Sinopsis no disponible')
+            back_drops = self.get_back_drops(tmdb_info)
+            cant = len(back_drops)
+            print(f"Number of backdrops found: {cant}")
+            for img in back_drops:
+                print(f"{self.img_base_url}{img.get('file_path')}")
+            # También puedes obtener el póster de alta calidad de TMDB si quieres
+            poster_path = tmdb_info.get('backdrop_path')
+            print("Datos obtenidos de TMDB exitosamente.")
+            print(f"Poster: {self.img_base_url}{poster_path}")
+            # print(tmdb_info)
+            rear_cover2 = Image.open(requests.get(f"{self.img_base_url}{back_drops[2].get('file_path')}", stream=True).raw)
+            rear_cover2 = ImageOps.cover(rear_cover2, (self.side_width, (self.canvas_height // 4) * 3))
+            cover.paste(rear_cover2, (0, self.canvas_height // 4))
+
+            rear_cover = Image.open(requests.get(f"{self.img_base_url}{poster_path}", stream=True).raw)
+            rear_cover = ImageOps.cover(rear_cover, (self.side_width, self.canvas_height // 2))
+            rear_degrade = self.degrage_image(cover, rear_cover)
+            # rear_degrade.show()
+            # exit(0)
+            cover.paste(rear_degrade, (self.side_width // 2 - rear_cover.width // 2, 0))
+
+        else:
+            # Fallback: Si no está en TMDB, usamos la de AniList (y ahí sí traduces)
+            print("No se encontró en TMDB, usando AniList + Traductor...")
+            raw_description = data.get('description', 'N/A')
+            # Aquí limpiarías el HTML de AniList y traducirías
+            # sinopsis = self.translate_text(raw_description)
+
         # Agregar sinopsis
         synopsis = data.get('description', 'Sin sinopsis disponible.')
         synopsis = textwrap.shorten(synopsis, width=520, placeholder="...")  # Recortar la sinopsis a un máximo de caracteres
         synopsis_esp = GoogleTranslator(source='auto', target='es').translate(synopsis)  # Traducir la sinopsis al español
         clean_synopsis = BeautifulSoup(synopsis_esp, "html.parser").get_text(separator='. ', strip=True)  # Limpiar la sinopsis de etiquetas HTML
         font_syn = ImageFont.truetype("./assets/agencyfb.TTF", font_size)
-        rear_text = textwrap.fill(clean_synopsis, width=75)  # Wrap the synopsis text to fit within a certain width
-        rear_text_position = (20, 20)  # Position for the synopsis text on the rear cover
-        draw.multiline_text(rear_text_position, rear_text, font=font_syn, fill=(255, 255, 255), spacing=-3, stroke_width=3, stroke_fill=(0, 0, 0))  # Draw the synopsis text on the rear cover
+        rear_text = textwrap.fill(clean_synopsis, width=90)  # Wrap the synopsis text to fit within a certain width
+        lines = rear_text.split('\n')
+        count_lines = len(lines)
+        left, top, right, bottom = font_syn.getbbox(rear_text)
+        line_hight = bottom - top
+        spacing = -3
+        total_hight = (line_hight * count_lines) + (spacing * (count_lines - 1))
+        rear_text_position = (20, 597 - total_hight - 100)  # Position for the synopsis text on the rear cover
+        draw.multiline_text(rear_text_position, rear_text, font=font_syn, fill=(255, 255, 255), spacing=spacing, stroke_width=3, stroke_fill=(0, 0, 0))  # Draw the synopsis text on the rear cover
         
         # Datos tecnicos
         font_tech = ImageFont.truetype("./assets/agencyfb.TTF", font_size)
@@ -94,11 +218,12 @@ class DVDGenAgent:
             "autumn": "otoño",
             "winter": "invierno"
         }
-        season = data.get('season', 'N/A').lower()
-        texto = season  # Por defecto, usamos el texto original si no se encuentra en el diccionario
-        for eng, esp in stations.items():
-            texto = texto.replace(eng, esp)
-        texto = texto.capitalize()
+        season = data.get('season', 'N/A')
+        if season:
+            season = season.lower()
+            for eng, esp in stations.items():
+                season = season.replace(eng, esp)
+            season = season.capitalize()
 
         if lang == "jap":
             language_text = self.lang_japanese
@@ -116,7 +241,7 @@ class DVDGenAgent:
             'Episodios': data.get('episodes', 'N/A'),
             'Estado': GoogleTranslator(source='auto', target='es').translate(data.get('status', 'N/A')).capitalize(),
             'Audio': language_text,
-            'Temporada': texto + ' ' + str(data.get('seasonYear', 'N/A'))
+            'Temporada': str(season) + ' ' + str(data.get('seasonYear', 'N/A'))
         }
 
         for key, value in data_tech.items():
@@ -301,9 +426,8 @@ class DVDGenAgent:
         if data is None:
             print("No se encontró el anime con el ID proporcionado.")
             exit(0)
-        
+        print(f"Anime encontrado: {data['title']['romaji']} ({data.get('seasonYear', 'N/A')})")
         lang = input("Ingrese el idioma del anime (jap, esp, lat): ").lower()
-        # lang = "jap"
 
         # Aquí descargarías la imagen de TMDB o AniList
         print(f"Generando cover para: {data['title']['romaji']}...")
@@ -311,9 +435,6 @@ class DVDGenAgent:
         # 1. Crear lienzo base (Blanco o Negro)
         cover = Image.new('RGB', (self.canvas_width, self.canvas_height), color=(255, 255, 255))
         draw = ImageDraw.Draw(cover)
-
-        # 4. Lógica para el Frente (Derecha del lienzo)
-        self.create_front(draw, data, cover, lang)
         
         # 2. Lógica para el posterior (Izquierdo del lienzo)
         self.create_rear(draw, data, cover, 25, lang)
@@ -321,17 +442,34 @@ class DVDGenAgent:
         # 3. Lógica para el lomo (Centro del lienzo)
         self.create_spine(draw, data, cover)
 
-        
-        cover.show()
-        return  0
+        # 4. Lógica para el Frente (Derecha del lienzo)
+        self.create_front(draw, data, cover, lang)
 
-        # 5. Guardar resultado
-        filename = f"{title_search.replace(' ', '_')}_cover.jpg"
-        cover.save(filename, quality=95)
+        # cover.show()
+        # return  0
+
+        # 5. Guardar resultado  
+        title = data['title']['romaji']
+        title = title.replace(':', ' -')
+        title_cleaned = self.clean_title(title)
+        title_shortened = textwrap.shorten(title_cleaned, width=45, placeholder='')
+        
+        # Language abbreviation
+        lang_abbr = lang.upper()
+        
+        # Season
+        season_name = data.get('season', '')
+        if season_name:
+            season_name = season_name.capitalize()
+        season_year = str(data.get('seasonYear', ''))
+        season_info = f"{season_name} {season_year}".strip()
+        
+        filename = f"{title_shortened} {lang_abbr} {season_info}.jpg"
+        cover.save(filename, dpi=(150, 150))
         print(f"Archivo guardado como: {filename}")
+        os.startfile(filename)
 
 # Uso del agente
 id_anime = input("Ingrese el ID del anime en AniList: ")
 agent = DVDGenAgent()
 agent.create_cover(int(id_anime))
-# agent.create_cover(187464)
