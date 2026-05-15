@@ -12,6 +12,8 @@ import urllib.request
 from io import BytesIO
 import requests
 
+from imageOp import degrade_image
+
 class DVDGenAgent:
     def __init__(self):
         self.anilist_url = 'https://graphql.anilist.co'
@@ -117,7 +119,6 @@ class DVDGenAgent:
             print(f"Error conectando a TMDB: {e}")
             return None
 
-    def degrage_image(self, cover, ruta_entrada):
         # 1. Abrir y preparar la imagen original
         # original = Image.open(ruta_entrada).convert("RGBA")
         original = ruta_entrada.convert("RGBA")
@@ -154,32 +155,32 @@ class DVDGenAgent:
         release_year = data.get('seasonYear')
         self.img_base_url = "https://image.tmdb.org/t/p/original"
         tmdb_info = self.get_tmdb_data(title_cleaned, release_year)
-        print(tmdb_info)
         
         if tmdb_info:
             # Si TMDB tiene sinopsis, la usamos (adiós traductor de Google)
             sinopsis = tmdb_info.get('overview', 'Sinopsis no disponible')
             back_drops = self.get_back_drops(tmdb_info)
             cant = len(back_drops)
+            ''' 
             print(f"Number of backdrops found: {cant}")
             for img in back_drops:
                 print(f"{self.img_base_url}{img.get('file_path')}")
+            '''
             # También puedes obtener el póster de alta calidad de TMDB si quieres
             poster_path = tmdb_info.get('backdrop_path')
             print("Datos obtenidos de TMDB exitosamente.")
-            print(f"Poster: {self.img_base_url}{poster_path}")
+            # print(f"Poster: {self.img_base_url}{poster_path}")
             # print(tmdb_info)
             rear_cover2 = Image.open(requests.get(f"{self.img_base_url}{back_drops[2].get('file_path')}", stream=True).raw)
             rear_cover2 = ImageOps.cover(rear_cover2, (self.side_width, (self.canvas_height // 4) * 3))
-            cover.paste(rear_cover2, (0, self.canvas_height // 4))
+            porcent_y = 0.30
+            pos_y = int(self.canvas_height * porcent_y)
+            cover.paste(rear_cover2, (0, pos_y))  # Paste the rear cover onto the new image
 
             rear_cover = Image.open(requests.get(f"{self.img_base_url}{poster_path}", stream=True).raw)
             rear_cover = ImageOps.cover(rear_cover, (self.side_width, self.canvas_height // 2))
-            rear_degrade = self.degrage_image(cover, rear_cover)
-            # rear_degrade.show()
-            # exit(0)
-            cover.paste(rear_degrade, (self.side_width // 2 - rear_cover.width // 2, 0))
-
+            rear_degrade = degrade_image(rear_cover)
+            cover.paste(rear_degrade, (self.side_width // 2 - rear_cover.width // 2, 0), rear_degrade)  # Paste the rear cover onto the new image
         else:
             # Fallback: Si no está en TMDB, usamos la de AniList (y ahí sí traduces)
             print("No se encontró en TMDB, usando AniList + Traductor...")
@@ -225,14 +226,11 @@ class DVDGenAgent:
                 season = season.replace(eng, esp)
             season = season.capitalize()
 
-        if lang == "jap":
-            language_text = self.lang_japanese
-        elif lang == "esp":
+        language_text = self.lang_japanese
+        if lang == "esp":
             language_text = self.lang_spanish
         elif lang == "lat":
             language_text = self.lang_latino
-        else:
-            language_text = "Desconocido"
 
         data_tech = {
             'Título': data.get('title', {}).get('romaji', 'N/A'),
@@ -341,7 +339,7 @@ class DVDGenAgent:
         anime_id_text = data['id']
         draw.text((self.side_width + (self.spine_width // 2 - title_font.getlength(str(anime_id_text)) // 2), self.canvas_height - 2 * margin_bottom - dvd_icon.height - 27), str(anime_id_text), fill=(0, 0, 0), font=title_font)
     
-    def create_front(self, draw, data, cover, lang):
+    def create_front(self, draw, data, cover, lang, cant=1):
         # Definimos las cabeceras para imitar a un navegador web
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
@@ -386,16 +384,22 @@ class DVDGenAgent:
 
         # Logo DVD
         dvd_logo = Image.open("assets/logo_dvd.png")
-        dvd_pos = (self.side_width + self.spine_width + 5, 5)
         dvd_logo = dvd_logo.resize((85, 85))  # Resize the DVD logo to match the new image size
-        cover.paste(dvd_logo, dvd_pos, dvd_logo)  # Paste the DVD logo onto the new image
+        pos_x = self.side_width + self.spine_width
+            
+        for x in range(0, cant):
+            if x == 0:
+                pos_x = pos_x + 5
+            else:
+                pos_x = pos_x + 67
+            cover.paste(dvd_logo, (pos_x, 5), dvd_logo)  # Paste the DVD logo onto the new image
+        # dvd_pos = (self.side_width + self.spine_width + 5, 5)
 
         # Etiqueta del idioma
-        if lang == "jap":
-            cover_language = Image.new('RGBA', (300, 55), self.cover_jap)  # Create a background for the language label
-            language_color = self.color_jap
-            language_text = self.lang_japanese
-        elif lang == "esp":
+        cover_language = Image.new('RGBA', (300, 55), self.cover_jap)  # Create a background for the language label
+        language_color = self.color_jap
+        language_text = self.lang_japanese
+        if lang == "esp":
             cover_language = Image.new('RGBA', (300, 55), self.cover_spa)  # Create a background for the language label
             language_color = self.color_spa
             language_text = self.lang_spanish
@@ -403,10 +407,6 @@ class DVDGenAgent:
             cover_language = Image.new('RGBA', (300, 55), self.cover_lat)  # Create a background for the language label
             language_color = self.color_lat
             language_text = self.lang_latino
-        else:
-            cover_language = Image.new('RGBA', (300, 55), "white")  # Create a white background for the language label
-            language_color = (0, 0, 0)  # Black text color
-            language_text = "Desconocido"
 
         # Centrar el texto dentro de la etiqueta del idioma
         language_font = ImageFont.truetype("./assets/BRLNSDB.TTF", 36)  # Load a font for the language label
@@ -427,10 +427,21 @@ class DVDGenAgent:
             print("No se encontró el anime con el ID proporcionado.")
             exit(0)
         print(f"Anime encontrado: {data['title']['romaji']} ({data.get('seasonYear', 'N/A')})")
-        lang = input("Ingrese el idioma del anime (jap, esp, lat): ").lower()
+        print("\nIngrese el idioma del anime (jap, esp, lat): ")
+        lang = input("Idioma (jap): ").lower()
+        
+        cant = input("\n¿Cuántos logos de DVD quieres en el frente? (1-3): ")
+        try:
+            cant = int(cant)
+            if cant < 1 or cant > 3:
+                print("Número inválido, se colocará 1 logo por defecto.")
+                cant = 1
+        except ValueError:
+            print("Entrada no válida, se colocará 1 logo por defecto.")
+            cant = 1
 
         # Aquí descargarías la imagen de TMDB o AniList
-        print(f"Generando cover para: {data['title']['romaji']}...")
+        print(f"\nGenerando cover para: {data['title']['romaji']}...")
         
         # 1. Crear lienzo base (Blanco o Negro)
         cover = Image.new('RGB', (self.canvas_width, self.canvas_height), color=(255, 255, 255))
@@ -443,7 +454,7 @@ class DVDGenAgent:
         self.create_spine(draw, data, cover)
 
         # 4. Lógica para el Frente (Derecha del lienzo)
-        self.create_front(draw, data, cover, lang)
+        self.create_front(draw, data, cover, lang, cant)
 
         # cover.show()
         # return  0
@@ -465,8 +476,9 @@ class DVDGenAgent:
         season_info = f"{season_name} {season_year}".strip()
         
         filename = f"{title_shortened} {lang_abbr} {season_info}.jpg"
+        # cover.show()
         cover.save(filename, dpi=(150, 150))
-        print(f"Archivo guardado como: {filename}")
+        print(f"\nArchivo guardado como: {filename}")
         os.startfile(filename)
 
 # Uso del agente
