@@ -1,0 +1,5 @@
+# Archivos y carpetas que seran excluidos del repositorio
+.env
+__pycache__/
+venv/
+*.jpg
