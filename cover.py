@@ -14,29 +14,29 @@ from imageOp import degrade_image
 from config import load_config
 
 def get_anilist_data(id):
-        query = '''
-        query Media($id: Int) {
-            Media(id: $id) {
-                id
-                title { romaji }
-                type
-                status
-                season
-                seasonYear
-                episodes
-                genres
-                description
-                coverImage {
-                  extraLarge
-                }
-                bannerImage
-                idMal
-          }
+    query = '''
+    query Media($id: Int) {
+        Media(id: $id) {
+            id
+            title { romaji }
+            type
+            status
+            season
+            seasonYear
+            episodes
+            genres
+            description
+            coverImage {
+                extraLarge
+            }
+            bannerImage
+            idMal
         }
-        '''
-        vars = {'id': id}
-        response = requests.post(cfg.get('anilist_url'), json={'query': query, 'variables': vars})
-        return response.json()['data']['Media']
+    }
+    '''
+    vars = {'id': id}
+    response = requests.post(cfg.get('anilist_url'), json={'query': query, 'variables': vars})
+    return response.json()['data']['Media']
 
 def get_tmdb_data(title, year):
     params = {
@@ -84,6 +84,7 @@ def clean_title(title):
         
 class DVDGenAgent:
     def __init__(self, cfg):
+        self.lang = 'jap' # Audio por defecto
         # Medidas en píxeles (a 300 DPI para calidad de impresión)
         self.side_width = (cfg.get('cover_width') - cfg.get('cover_spine')) // 2
 
@@ -361,26 +362,7 @@ class DVDGenAgent:
         cover_language = cover_language.rotate(-45, expand=True, fillcolor=(0, 0, 0, 0))  # Rotate the language label by -45 degrees
         cover.paste(cover_language, (1380, -50), cover_language)  # Paste the language label onto the new image
 
-    def create_cover(self, media_id):
-        data = get_anilist_data(media_id)
-        
-        if data is None:
-            print("No se encontró el anime con el ID proporcionado.")
-            exit(0)
-        print(f"Anime encontrado: {data['title']['romaji']} ({data.get('seasonYear', 'N/A')})")
-        print("\nIngrese el idioma del anime (jap, esp, lat): ")
-        lang = input("Idioma (jap): ").lower()
-        
-        cant = input("\n¿Cuántos logos de DVD quieres en el frente? (1-3): ")
-        try:
-            cant = int(cant)
-            if cant < 1 or cant > 3:
-                print("Número inválido, se colocará 1 logo por defecto.")
-                cant = 1
-        except ValueError:
-            print("Entrada no válida, se colocará 1 logo por defecto.")
-            cant = 1
-
+    def create_cover(self):
         # 1. Crear lienzo base (Blanco o Negro)
         cover = Image.new('RGB', (cfg.get('cover_width'), cfg.get('cover_height')), color=(255, 255, 255))
         draw = ImageDraw.Draw(cover)
@@ -428,7 +410,37 @@ if __name__ == "__main__":
     path = Path(cfg.get('output_dir'))
     if not path.exists():
         print("ERROR: La ruta destino no existe!")
-    else:
-        agent = DVDGenAgent(cfg)
-        id_anime = input("Ingrese el ID del anime en AniList: ")
-        agent.create_cover(int(id_anime))
+        exit(0)
+    
+    agent = DVDGenAgent(cfg)
+    
+    id_anime = input("Ingrese el ID del anime en AniList: ")
+    data = get_anilist_data(id_anime)    
+    if data is None:
+        print("No se encontró el anime con el ID proporcionado.")
+        exit(0)
+    print(f"Anime encontrado: {data['title']['romaji']} ({data.get('seasonYear', 'N/A')})")
+    
+    # Establecer el idioma
+    print("\nIngrese el idioma del anime (jap, esp, lat): ")
+    lang = input("Idioma (jap): ").lower()
+    if not lang:
+        print("Idioma por defecto: jap")
+        lang = 'jap'
+    elif lang not in ('jap', 'esp', 'lat'):
+        print("Opción no válida, idioma por defecto (jap)")
+        lang = 'jap'
+    agent.lang = lang
+    
+    # Establecer la cantidad de discos
+    cant = input("\n¿Cuántos logos de DVD quieres en el frente? (1-3): ")
+    try:
+        cant = int(cant)
+        if cant < 1 or cant > 3:
+            print("Número inválido, se colocará 1 logo por defecto.")
+            cant = 1
+    except ValueError:
+        print("Entrada no válida, se colocará 1 logo por defecto.")
+        cant = 1
+    
+    agent.create_cover()
